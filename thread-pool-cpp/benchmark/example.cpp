@@ -90,7 +90,8 @@ int main () {
 	internal_test test_class(&my_pool);
 	test_class.test_submit();
 	test_class.nested_submit();
-
+	
+	my_pool.DisplayNumTask();
 	my_pool.Stop();
 	return 0;
 }

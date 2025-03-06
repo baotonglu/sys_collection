@@ -41,6 +41,7 @@ public:
     void Stop();
     void Wait();
     void AddNumTask(int);
+    void DisplayNumTask();
     void LockQueue();
     void UnlockQueue();
 
@@ -102,6 +103,10 @@ void MyThreadPool::QueueJobWOLock(const std::function<void(void*)>& job, void* p
 void MyThreadPool::AddNumTask(int num){
     num_tasks.fetch_add(num);
     // assert(num_tasks == jobs.size());
+}
+
+void MyThreadPool::DisplayNumTask(){
+    std::cout << "Num tasks = " << num_tasks << std::endl;
 }
 
 void MyThreadPool::NotifyAll() {
