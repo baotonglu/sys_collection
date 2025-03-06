@@ -50,7 +50,7 @@ public:
 		for (size_t i = 0; i < nr_submit; i++) {
 			pool_->QueueJobWOLock([this](void* param) { return this->thread_func(param); }, (void*)i);
 		}
-		pool_->SetNumTask(nr_submit);
+		pool_->AddNumTask(nr_submit);
 		pool_->UnlockQueue();
 		pool_->NotifyAll();
 		pool_->Wait();

@@ -34,13 +34,38 @@ public:
 		for (size_t i = 0; i < nr_submit; i++) {
 			pool_->QueueJobWOLock([this](void* param) { return this->thread_func(param); }, (void*)i);
 		}
-		pool_->SetNumTask(nr_submit);
+		pool_->AddNumTask(nr_submit);
 		pool_->UnlockQueue();
 		pool_->NotifyAll();
 		pool_->Wait();
 		auto end = std::chrono::high_resolution_clock::now();
 		auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
 		std::cout << "class internal thread pool(ms): " << duration/1000 << std::endl;
+	}
+
+	// Below is the example of nested submit
+	void subtask(){
+		size_t nr_submit = 2000;
+		pool_->LockQueue();
+		for (size_t i = 0; i < nr_submit; i++) {
+			pool_->QueueJobWOLock([this](void* param) { return this->thread_func(param); }, (void*)i);
+		}
+		pool_->AddNumTask(nr_submit);
+		pool_->UnlockQueue();
+		pool_->NotifyAll();
+	}
+
+	void nested_submit(){
+		auto start = std::chrono::high_resolution_clock::now();
+		pool_->LockQueue();
+		pool_->QueueJobWOLock([this](void* param) { return this->subtask(); }, nullptr);
+		pool_->AddNumTask(1);
+		pool_->UnlockQueue();
+		pool_->NotifyAll();
+		pool_->Wait();
+		auto end = std::chrono::high_resolution_clock::now();
+		auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+		std::cout << "nested thread pool(ms): " << duration/1000 << std::endl;
 	}
 
 	int thread_func(void* para){
@@ -61,10 +86,12 @@ public:
 int main () {
     MyThreadPool my_pool;
     my_pool.Start();
+	
 	internal_test test_class(&my_pool);
 	test_class.test_submit();
-	my_pool.Stop();
+	test_class.nested_submit();
 
+	my_pool.Stop();
 	return 0;
 }
 
