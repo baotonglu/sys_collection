@@ -15,10 +15,8 @@
 #include <sstream>
 #include <tuple>
 #include <future>
-#include <omp.h>
 #include <time.h>
 #include "mempool.hpp"
-#include "system.hpp"
 
 class internal_test{
 public:
