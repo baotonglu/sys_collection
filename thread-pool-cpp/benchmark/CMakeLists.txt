@@ -6,4 +6,6 @@ add_executable(benchmark benchmark.cpp)
 target_link_libraries(benchmark pthread)
 add_executable(benchmark_cpy benchmark_cpy.cpp)
 target_link_libraries(benchmark_cpy pthread)
+add_executable(example example.cpp)
+target_link_libraries(example pthread)
 

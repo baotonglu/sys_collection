@@ -14,6 +14,7 @@
 #include <queue>
 #include <utility>
 #include <atomic>
+#include <cassert>
 
 void set_affinity(uint32_t idx) {
     cpu_set_t my_set;
@@ -34,14 +35,14 @@ void set_affinity(uint32_t idx) {
 class MyThreadPool {
 public:
     void Start(uint32_t num_threads = 0);
-    // void QueueJob(const std::function<void()>& job, uint32_t);
-    void QueueJobWOLock(const std::function<void(uint32_t)>& job, uint32_t para);
+    void QueueJobWOLock(const std::function<void(void*)>& job, void* para);
     void NotifyAll();
     void NotifyOne();
     void Stop();
     void Wait();
-    void SetNumTask(uint32_t);
-    void NotifyMain();
+    void SetNumTask(int);
+    void LockQueue();
+    void UnlockQueue();
 
 private:
     void ThreadLoop(uint32_t); // input is the thread id
@@ -52,9 +53,8 @@ private:
     std::condition_variable mutex_condition; // Allows threads to wait on new jobs or termination 
     std::condition_variable main_condition; // main thread uses this condition variable to wait
     std::vector<std::thread> threads;
-    std::queue<std::pair<std::function<void(uint32_t)>,uint32_t>> jobs;
-    std::atomic<uint32_t> num_tasks;
-    bool notify_main_thread;
+    std::queue<std::pair<std::function<void(void*)>,void*>> jobs;
+    std::atomic<int> num_tasks;
 };
 
 void MyThreadPool::Start(uint32_t num_threads) {
@@ -67,13 +67,12 @@ void MyThreadPool::Start(uint32_t num_threads) {
     }
 
     num_tasks = 0;
-    notify_main_thread = false;
 }
 
 void MyThreadPool::ThreadLoop(uint32_t thread_idx) {
     set_affinity(thread_idx); 
     while (true) {
-        std::pair<std::function<void(uint32_t)>,uint32_t> job;
+        std::pair<std::function<void(void*)>,void*> job;
         {
             std::unique_lock<std::mutex> lock(queue_mutex);
             mutex_condition.wait(lock, [this] {
@@ -84,27 +83,25 @@ void MyThreadPool::ThreadLoop(uint32_t thread_idx) {
             }
             job = jobs.front();
             jobs.pop();
+
         }
-        job.first(job.second); // Store the result in some places?
-        num_tasks--;
-        if(num_tasks == 0 && notify_main_thread == true){
+        job.first(job.second);
+        auto cur_num = num_tasks.fetch_sub(1);
+        if(cur_num == 1){
+            // std::cout << "finally notify main thread" << std::endl;
             std::unique_lock<std::mutex> lock(main_mutex);
             main_condition.notify_one();
-            notify_main_thread = false;
         }
     }
 }
 
-void MyThreadPool::QueueJobWOLock(const std::function<void(uint32_t)>& job, uint32_t para) {
-    jobs.push(std::pair<std::function<void(uint32_t)>,uint32_t>(job, para));
+void MyThreadPool::QueueJobWOLock(const std::function<void(void*)>& job, void* para) {
+    jobs.push(std::pair<std::function<void(void*)>,void*>(job, para));
 }
 
-void MyThreadPool::SetNumTask(uint32_t num){
+void MyThreadPool::SetNumTask(int num){
     num_tasks = num;
-}
-
-void MyThreadPool::NotifyMain(){
-    notify_main_thread = true;
+    assert(num_tasks == jobs.size());
 }
 
 void MyThreadPool::NotifyAll() {
@@ -113,6 +110,14 @@ void MyThreadPool::NotifyAll() {
 
 void MyThreadPool::NotifyOne() {
     mutex_condition.notify_one();
+}
+
+void MyThreadPool::LockQueue() {
+    queue_mutex.lock();
+}
+
+void MyThreadPool::UnlockQueue() {
+    queue_mutex.unlock();
 }
 
 // Only use this when the system terminates
@@ -132,7 +137,6 @@ void MyThreadPool::Stop() {
 void MyThreadPool::Wait(){
     {
         std::unique_lock<std::mutex> lock(main_mutex);
-        if(num_tasks == 0) return;
         main_condition.wait(lock, [this] {
             return num_tasks == 0;
         });
